@@ -1,0 +1,84 @@
+1. When a user takes a picture, that picture is stored in a path based on the given URI. In which part of the code handles this? (Copy that part of the code as the answer)
+
+class FileHelper(private val context: Context) {
+    // Generate a URI to access the file
+    // The URI will be temporary to limit access from other apps
+    fun getUriFromFile(file: File): Uri {
+        return FileProvider.getUriForFile(
+            context,
+            "com.example.lab_week_11_b.fileprovider",
+            file
+        )
+    }
+}
+
+Cara kerja :
+- File akan diubah menjadi URI Ketika potongan kode FileProvider.getUriForFile() ini dijalankan.
+- Kamera akan menyimpan foto ke path file tersebut, karena URI ini dipakai saat membuka kamera.
+
+2. In your FileInfo.kt, there are 5 attributes. On the first attribute, what does the URI refer to? And on the fourth attribute, what does relativePath refer to?
+
+Pada File FileInfo.kt, uri merupakan Alamat unik file (identifier resmi Android untuk mengakses file tersebut). Sedangkan, relativePath merupakan Path folder relatif tempat file disimpan di dalam penyimpanan publik (misal: Pictures/MyApp/).
+
+3. Explain the chronological order from when a user takes a picture until the file is stored in the MediaStore.
+
+a. Langkah pertama : Pengguna menekan tombol “Take Photo”
+
+Saat tombol photo_button ditekan:
+isCapturingVideo = false
+checkStoragePermission { openImageCapture() }
+
+Aplikasi cek izin penyimpanan, lalu menjalankan openImageCapture().
+
+b. Langkah kedua : Aplikasi membuat file sementara dan URI FileProvider
+
+Di openImageCapture():
+
+photoInfo = providerFileManager.generatePhotoUri(System.currentTimeMillis())
+takePictureLauncher.launch(photoInfo.uri)
+
+Pada fungsi generatePhotoUri():
+
+- Nama file dibuat → img_<time>.jpg
+- File dibuat di: Android/data/<package>/files/Pictures/
+- URI untuk file tersebut dibuat melalui: FileProvider.getUriForFile(...)
+
+c. Langkah ketiga : Kamera dibuka oleh contract TakePicture()
+
+Android membuka aplikasi kamera dan memberikan lokasi penyimpanan (URI FileProvider) agar kamera menulis foto ke sana.
+
+d. Langkah keempat : Pengguna mengambil gambar → Kamera menyimpan hasil ke file sementara
+
+Kamera menulis file gambar langsung ke: Android/data/<package>/files/Pictures/img_<time>.jpg
+
+Setelah selesai, TakePicture() mengembalikan true, dan callback dipanggil: providerFileManager.insertImageToStore(photoInfo)
+
+e. Langkah kelima : Aplikasi mulai memindahkan file ke MediaStore
+
+insertImageToStore() memanggil:
+
+insertToStore(fileInfo, imageContentUri, contentValues)
+
+f. Langkah keenam : MediaStore menyimpan file dan metadatanya
+
+val insertedUri = contentResolver.insert(contentUri, contentValues)
+
+Android MediaStore membuat metadata entri baru, misalnya:
+- DISPLAY_NAME = "img_<time>.jpg"
+- RELATIVE_PATH = "Pictures/"
+- MIME_TYPE = "image/jpeg"
+
+g. Langkah ketujuh : Aplikasi menyalin isi file sementara ke MediaStore
+
+val inputStream = contentResolver.openInputStream(fileInfo.uri)
+val outputStream = contentResolver.openOutputStream(insertedUri)
+IOUtils.copy(inputStream, outputStream)
+
+- Membaca foto dari file sementara (FileProvider)
+- Menuliskannya ke MediaStore melalui insertedUri
+- Dengan kode ini, file dipindahkan (di-copy), bukan hanya direferensikan.
+
+h. Langkah kedelapan : Gambar muncul di Gallery / Google Photos
+
+Karena MediaStore adalah database media Android, sistem akan men-scan foto tersebut dan menambahkannya di galeri.
+
